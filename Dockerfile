@@ -5,5 +5,5 @@ RUN go get -u
 RUN go build
 
 FROM alpine
-COPY --from=build-env /work/provider_bus_operator /sxbin/provider_bus_operator
+COPY --from=build-env /work/provider_weather_info /sxbin/provider_weather_info
 WORKDIR /sxbin

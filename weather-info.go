@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 
-	rcm "github.com/synerex/proto_recommend"
-	api "github.com/synerex/synerex_api"
 	pbase "github.com/synerex/synerex_proto"
 	sxutil "github.com/synerex/synerex_sxutil"
-	"google.golang.org/protobuf/proto"
 
 	"log"
 	"sync"
@@ -21,42 +17,12 @@ var (
 	local           = flag.String("local", "", "Local Synerex Server")
 	mu              sync.Mutex
 	version         = "0.0.0"
-	role            = "BusOperator"
+	role            = "WeatherInfo"
 	sxServerAddress string
 )
 
 func init() {
 	flag.Parse()
-}
-
-func supplyRecommendCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
-	recommend := &rcm.Recommend{}
-	err := proto.Unmarshal(sp.Cdata.Entity, recommend)
-	if err == nil {
-		log.Printf("Received Recommend Supply from %d %+v", sp.SenderId, recommend)
-	}
-}
-
-func subscribeRecommendSupply(client *sxutil.SXServiceClient) {
-	ctx := context.Background() //
-	for {                       // make it continuously working..
-		client.SubscribeSupply(ctx, supplyRecommendCallback)
-		log.Print("Error on subscribe")
-		reconnectClient(client)
-	}
-}
-
-func supplyJsonRecordCallback(clt *sxutil.SXServiceClient, sp *api.Supply) {
-	log.Printf("Received JsonRecord Supply from %d %+v", sp.SenderId, sp.ArgJson)
-}
-
-func subscribeJsonRecordSupply(client *sxutil.SXServiceClient) {
-	ctx := context.Background() //
-	for {                       // make it continuously working..
-		client.SubscribeSupply(ctx, supplyJsonRecordCallback)
-		log.Print("Error on subscribe")
-		reconnectClient(client)
-	}
 }
 
 func reconnectClient(client *sxutil.SXServiceClient) {
@@ -85,7 +51,7 @@ func main() {
 	sxutil.RegisterDeferFunction(sxutil.UnRegisterNode)
 	log.Printf("%s(%s) built %s sha1 %s", role, sxutil.GitVer, sxutil.BuildTime, sxutil.Sha1Ver)
 
-	channelTypes := []uint32{pbase.ALT_PT_SVC} //, pbase.JSON_DATA_SVC}
+	channelTypes := []uint32{pbase.JSON_DATA_SVC}
 
 	var rerr error
 	sxServerAddress, rerr = sxutil.RegisterNode(*nodesrv, role, channelTypes, nil)
@@ -98,7 +64,7 @@ func main() {
 	}
 	log.Printf("Connecting SynerexServer at [%s]", sxServerAddress)
 
-	wg := sync.WaitGroup{} // for syncing other goroutines
+	// wg := sync.WaitGroup{} // for syncing other goroutines
 
 	client := sxutil.GrpcConnectServer(sxServerAddress)
 
@@ -108,12 +74,21 @@ func main() {
 		log.Print("Connecting SynerexServer")
 	}
 
-	rcmClient := sxutil.NewSXServiceClient(client, pbase.ALT_PT_SVC, fmt.Sprintf("{Client:%s}", role))
-	// envClient := sxutil.NewSXServiceClient(client, pbase.JSON_DATA_SVC, fmt.Sprintf("{Client:%s}", role))
+	envClient := sxutil.NewSXServiceClient(client, pbase.JSON_DATA_SVC, fmt.Sprintf("{Client:%s}", role))
 
-	wg.Add(1)
-	log.Print("Subscribe Supply")
-	go subscribeRecommendSupply(rcmClient)
+	smo := sxutil.SupplyOpts{
+		Name: role,
+		JSON: "{\"weatherInfo\": \"chincha\"}", // ここに事故情報を入れる
+	}
+	_, nerr := envClient.NotifySupply(&smo)
+	if nerr != nil {
+		log.Printf("Send Fail! %v\n", nerr)
+	} else {
+		//							log.Printf("Sent OK! %#v\n", ge)
+	}
+
+	// wg.Add(1)
+	// log.Print("Subscribe Supply")
 	// go subscribeJsonRecordSupply(envClient)
-	wg.Wait()
+	// wg.Wait()
 }
